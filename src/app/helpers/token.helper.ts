@@ -1,7 +1,7 @@
 import * as jwt from "jsonwebtoken";
 const {secret, tokens} = require('../../config/app').jwt;
 import {v4 as uuid} from "uuid";
-import Token, {IToken} from '../models/token';
+import Token from '../models/token';
 
 
 export const generateAccessToken= async (userId:string)=>{
@@ -17,15 +17,14 @@ export const generateRefreshToken = async () => {
         id:uuid(),
         type: tokens.refresh.type,
     };
-    console.log('ilyas1');
     return {
         id: payload.id,
         token: jwt.sign(payload, secret,tokens.alg)
     };
 };
 
-export const replaceDbRefreshToken = async (tokenId:string, userId:string,oldTokenId:string) => {
-    Token.findOneAndDelete({tokenId:oldTokenId})
+export const replaceDbRefreshToken = async (tokenId:string, userId:string,idTable:string) => {
+    Token.findByIdAndDelete(idTable)
         .exec()
         .then(() => {
             Token.create({tokenId, userId})
@@ -39,10 +38,10 @@ export const createDbToken= async (tokenId:string, userId:string)=>{
     return Token.create({tokenId, userId})
 }
 
-export const updateTokens = async (userId: string,tokenId:string) => {
+export const updateTokens = async (userId: string,idTable:string) => {
     const accessToken = await generateAccessToken(userId);
     const refreshToken = await generateRefreshToken();
-    replaceDbRefreshToken(refreshToken.id, userId,tokenId);
+    await replaceDbRefreshToken(refreshToken.id, userId,idTable);
     return {
         access:accessToken,
         refresh: refreshToken.token

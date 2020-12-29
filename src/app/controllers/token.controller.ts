@@ -1,18 +1,15 @@
 import {Request, Response} from 'express';
 import {
     createTokens,
-    generateAccessToken,
-    generateRefreshToken,
-    replaceDbRefreshToken,
     updateTokens
 } from "../helpers/token.helper";
-import jwt, {verify, VerifyErrors} from "jsonwebtoken";
+import {JsonWebTokenError, TokenExpiredError, verify} from "jsonwebtoken";
 import Token, {IToken} from '../models/token';
 
 
-const {secret,tokens} = require('../../config/app').jwt;
+const {secret, tokens} = require('../../config/app').jwt;
 
-type verifyRefreshType={
+type verifyRefreshType = {
     id: string,
     type: string,
     iat: number,
@@ -25,35 +22,36 @@ const create = async (req: Request, res: Response) => {
 
 const refresh = async (req: Request, res: Response) => {
     const {refreshToken} = req.body;
-    let payload;
+    let payload: { type: any; id: any; iat?: number; exp?: number; };
     try {
-        payload =<verifyRefreshType> await jwt.verify(refreshToken, secret);
-        console.log(payload);
+        payload = <verifyRefreshType>await verify(refreshToken, secret);
         if (payload.type !== tokens.refresh.type) {
             res.status(400).json({message: 'Недейстивтельный токен'});
             return;
         }
-        Token.findOne({tokenId: payload.id})
-            .exec()
-            .then(token => {
-                if (token === null) {
-                    throw new Error('Токен не действителен');
+        Token.find().exec().then((tokens: IToken[]) => {
+            let tokenId: IToken | null = null;
+            tokens.forEach(async token => {
+                if (payload.id === Buffer.from(token.tokenId, 'base64').toString()) {
+                    tokenId = token;
+                    res.status(200).json(await updateTokens(token.userId, token._id));
                 }
-                return updateTokens(token.userId,token.tokenId);
             })
-            .then(tokens => res.json(tokens))
+            if (tokenId === null) {
+                throw new Error('Токен не действителен');
+            }
+        })
             .catch(err => res.status(400).json({message: err.message}));
     } catch (e) {
-        if (e instanceof jwt.TokenExpiredError) {
+        if (e instanceof TokenExpiredError) {
             res.status(400).json({message: e.message});
             return;
-        } else if (e instanceof jwt.JsonWebTokenError) {
+        } else if (e instanceof JsonWebTokenError) {
             res.status(400).json({message: e.message});
             return;
         }
     }
 };
-
 
 
 export default {
